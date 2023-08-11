@@ -3,6 +3,6 @@ before_install:
   - chmod +x scala-cli
 install:
   - |
-    ./scala-cli --power publish --publish-repository $HOME/.m2/repository --organization "$GROUP" --name "$ARTIFACT" --version "$VERSION" .
+    ./scala-cli --power publish --publish-repository $HOME/.m2/repository --organization "$GROUP" --name "$ARTIFACT" --project-version "$VERSION" .
     ls -R $HOME/.m2/repository/
     find $HOME/.m2/repository -type f -name "*.pom" -exec cp -v {} $PWD \;
