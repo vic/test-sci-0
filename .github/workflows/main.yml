@@ -1,0 +1,111 @@
+on:
+  push:
+jobs:
+  format:
+    runs-on: "ubuntu-latest"
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    - uses: coursier/cache-action@v6
+    - uses: VirtusLab/scala-cli-setup@v1
+    - name: Scalafmt check
+      run: |
+        scala-cli --power fmt --check . || (
+          echo "To format code run"
+          echo "  scala-cli fmt ."
+          exit 1
+        )
+
+  test:
+    needs: format
+    runs-on: ${{ matrix.OS }}
+    strategy:
+      matrix:
+        OS: ["ubuntu-latest", "macos-latest", "windows-latest"]
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    - uses: coursier/cache-action@v6
+    - uses: VirtusLab/scala-cli-setup@v1
+    - run: scala-cli --power test .
+
+  jitpack-commit:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: JitPack commit build
+        run: |
+          set -x
+          curl -vSL https://jitpack.io/com/github/$GITHUB_REPOSITORY/$GITHUB_SHA/build.log || true
+
+  jitpack-release:
+    needs: test
+    runs-on: ubuntu-latest
+    if: contains(github.ref, 'tags')
+    steps:
+      - name: JitPack release build
+        run: |
+          set -x
+          curl -vSL https://jitpack.io/com/github/$GITHUB_REPOSITORY/$(echo "${{github.ref}}" | sed 's#tags/##')/build.log || true
+
+  package-jvm:
+    needs: test
+    runs-on: "ubuntu-latest"
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    - uses: coursier/cache-action@v6
+    - uses: VirtusLab/scala-cli-setup@v1
+    - name: Package jvm application
+      run: |
+        scala-cli --power package --assembly -o "launchers/$(echo $GITHUB_REPOSITORY | cut -d/ -f2-).jar" .
+    - uses: actions/upload-artifact@v3
+      with:
+        name: jvm-app
+        path: launchers
+        if-no-files-found: error
+        retention-days: 2
+
+  package-js:
+    needs: test
+    runs-on: "ubuntu-latest"
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    - uses: coursier/cache-action@v6
+    - uses: VirtusLab/scala-cli-setup@v1
+    - name: Package js application
+      run: |
+        scala-cli --power package --js --js-emit-source-maps --js-source-maps-path "launchers/$(echo $GITHUB_REPOSITORY | cut -d/ -f2-).js.map" -o "launchers/$(echo $GITHUB_REPOSITORY | cut -d/ -f2-).js" .
+    - uses: actions/upload-artifact@v3
+      with:
+        name: js-app
+        path: launchers
+        if-no-files-found: error
+        retention-days: 2
+
+  package-launchers:
+    needs: test
+    runs-on: ${{ matrix.OS }}-latest
+    strategy:
+      matrix:
+        OS: ["ubuntu", "macos", "windows"]
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    - uses: coursier/cache-action@v6
+    - uses: VirtusLab/scala-cli-setup@v1
+    - name: Package ${{ matrix.OS }} native application
+      run: |
+        scala-cli --power package --native-image -o "launchers/$(echo $GITHUB_REPOSITORY | cut -d/ -f2-)" .
+    - uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.OS }}-app
+        path: launchers
+        if-no-files-found: error
+        retention-days: 2
